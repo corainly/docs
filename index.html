@@ -274,8 +274,8 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
-        /* 鼠标悬停提示框 */
-        .nav-item-tooltip {
+        /* 鼠标悬停提示框 - 通用样式 */
+        .nav-item-tooltip, .folder-tooltip {
             position: absolute;
             left: 100%;
             top: 50%;
@@ -300,6 +300,14 @@
             opacity: 1;
             visibility: visible;
         }
+        /* 文件夹悬停提示 */
+        .folder-title {
+            position: relative;
+        }
+        .folder-title:hover .folder-tooltip {
+            opacity: 1;
+            visibility: visible;
+        }
         /* 关键字高亮 */
         .highlight {
             background-color: var(--highlight-bg);
@@ -321,7 +329,6 @@
             gap: 12px;
             cursor: pointer;
             user-select: none;
-            position: relative;
         }
         .folder-title:hover {
             background-color: var(--hover-bg);
@@ -601,7 +608,7 @@
             .sidebar-collapsed .sidebar-toggle {
                 left: 12px;
             }
-            .nav-item-tooltip {
+            .nav-item-tooltip, .folder-tooltip {
                 display: none; /* 在移动设备上隐藏提示框 */
             }
         }
@@ -727,12 +734,15 @@
         function highlightText(text, query) {
             if (!query || !text) return text;
             
-            const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+            // 转义正则表达式特殊字符
+            const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(`(${escapedQuery})`, 'gi');
             return text.replace(regex, '<span class="highlight">$1</span>');
         }
         
         // 工具函数：转义HTML
         function escapeHtml(text) {
+            if (!text) return '';
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
@@ -751,6 +761,7 @@
                 loadingScreen.style.visibility = 'hidden';
             }, 500);
         });
+        
         // 获取一言
         async function fetchHitokoto() {
             try {
@@ -761,6 +772,7 @@
                 hitokotoElement.textContent = '"学而不思则罔，思而不学则殆。" —— 孔子';
             }
         }
+        
         // 加载目录树
         async function loadDirectoryTree() {
             try {
@@ -774,6 +786,7 @@
                 directoryTree.innerHTML = `<div style="padding: 15px; color: red;">加载目录树失败: ${error.message}</div>`;
             }
         }
+        
         // 解析目录树 - 改进的解析方法，处理带反引号的文件名
         function parseDirectoryTree(text) {
             const lines = text.split('\n');
@@ -861,6 +874,7 @@
             
             return buildNestedStructure(structure);
         }
+        
         // 构建嵌套结构
         function buildNestedStructure(flatStructure) {
             const nestedStructure = {};
@@ -892,6 +906,7 @@
             });
             return nestedStructure;
         }
+        
         // 渲染目录树
         function renderDirectoryTree() {
             if (!state.directoryStructure) return;
@@ -916,6 +931,7 @@
                 `;
             }
         }
+        
         // 递归渲染嵌套项目 - 改进搜索逻辑
         function renderNestedItems(items, level = 0, parentPath = '') {
             let html = '';
@@ -950,6 +966,7 @@
                                 <div class="icon"><i class="ti ti-folder"></i></div>
                                 <div class="label">${folderName}</div>
                                 <div class="chevron"><i class="ti ti-chevron-down"></i></div>
+                                <div class="folder-tooltip">${escapeHtml(item._name)}</div>
                             </div>
                             <div class="folder-content" style="${isCollapsed ? 'display: none;' : ''}">
                                 ${renderNestedItems(item._items, level + 1, item._path)}
@@ -994,6 +1011,7 @@
             });
             return html;
         }
+        
         // 检查项目是否匹配搜索
         function checkMatchingItems(items, query) {
             if (!query) return true;
@@ -1018,6 +1036,7 @@
             }
             return false;
         }
+        
         // 设置事件监听器
         function setupEventListeners() {
             directoryTree.addEventListener('click', e => {
@@ -1034,6 +1053,7 @@
                     toggleFolderCollapse(folderPath, folderTitle);
                 }
             });
+            
             themeSwitcher.addEventListener('click', toggleThemePanel);
             themeOptions.forEach(option => {
                 option.addEventListener('click', () => {
@@ -1042,18 +1062,22 @@
                     toggleThemePanel();
                 });
             });
+            
             document.addEventListener('click', (e) => {
                 if (!themeSwitcher.contains(e.target) && !themePanel.contains(e.target)) {
                     hideThemePanel();
                 }
             });
+            
             sidebarToggle.addEventListener('click', () => {
                 toggleSidebar(!state.sidebarCollapsed);
             });
+            
             searchInput.addEventListener('input', (e) => {
                 state.searchQuery = e.target.value;
                 renderDirectoryTree();
             });
+            
             document.addEventListener('click', (e) => {
                 if (e.target.id === 'goHomeLink') {
                     e.preventDefault();
@@ -1061,9 +1085,11 @@
                     updateActiveItem('index.md');
                 }
             });
+            
             window.addEventListener('resize', handleResize);
             handleResize();
         }
+        
         // 切换侧边栏
         function toggleSidebar(collapsed, saveToStorage = true) {
             state.sidebarCollapsed = collapsed;
@@ -1073,12 +1099,14 @@
             }
             updateSidebarToggleIcon();
         }
+        
         function updateSidebarToggleIcon() {
             const icon = sidebarToggle.querySelector('i');
             if (icon) {
                 icon.className = state.sidebarCollapsed ? 'ti ti-menu-2' : 'ti ti-x';
             }
         }
+        
         // 折叠文件夹
         function toggleFolderCollapse(folderPath, folderTitle) {
             const wasCollapsed = state.collapsedFolders[folderPath] !== undefined ? state.collapsedFolders[folderPath] : true;
@@ -1090,6 +1118,7 @@
                 contentElement.style.display = wasCollapsed ? 'block' : 'none';
             }
         }
+        
         // 加载文件 - 修复了特殊字符文件路径的处理
         async function loadFile(filePath) {
             if (!filePath) {
@@ -1148,6 +1177,7 @@
                 showNotFoundPage();
             }
         }
+        
         // 显示404
         function showNotFoundPage() {
             const notFoundContent = notFoundTemplate.content.cloneNode(true);
@@ -1155,6 +1185,7 @@
             mainContent.appendChild(notFoundContent);
             mainContent.style.opacity = '1';
         }
+        
         // 更新选中项
         function updateActiveItem(filePath) {
             document.querySelectorAll('.nav-item').forEach(item => {
@@ -1163,6 +1194,7 @@
                 item.classList.toggle('active', isActive);
             });
         }
+        
         // 处理初始 URL
         function handleInitialUrl() {
             const params = new URLSearchParams(window.location.search);
@@ -1176,6 +1208,7 @@
                 loadFile('index.md');
             }
         }
+        
         // 应用主题
         function applyTheme(theme) {
             state.theme = theme;
@@ -1188,24 +1221,29 @@
             }
             updateThemeOptions();
         }
+        
         // 更新主题选项
         function updateThemeOptions() {
             themeOptions.forEach(option => {
                 option.classList.toggle('active', option.dataset.theme === state.theme);
             });
         }
+        
         // 主题面板
         function toggleThemePanel() {
             state.themePanelVisible ? hideThemePanel() : showThemePanel();
         }
+        
         function showThemePanel() {
             themePanel.classList.add('show');
             state.themePanelVisible = true;
         }
+        
         function hideThemePanel() {
             themePanel.classList.remove('show');
             state.themePanelVisible = false;
         }
+        
         // 响应式
         function handleResize() {
             if (window.innerWidth < 768) {
@@ -1218,6 +1256,7 @@
                 }
             }
         }
+        
         // 监听系统主题
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
             if (state.theme === 'system') {
