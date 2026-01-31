@@ -622,7 +622,7 @@
             <img src="material/404.png"> 
             <h2>小笨蛋，页面跑偏啦～</h2>
             <p>页面不存在或已被移除</p>
-            <a href="/" id="goHomeLink">返回首页</a>
+            <a href="#" id="goHomeLink">返回首页</a>
         </div>
     </template>
     <script>
@@ -661,7 +661,6 @@
         const sidebarToggle = document.getElementById('sidebarToggle');
         const searchInput = document.getElementById('searchInput');
         const notFoundTemplate = document.getElementById('notFoundTemplate');
-        const goHomeLink = document.getElementById('goHomeLink');
         const themeOptions = document.querySelectorAll('.theme-option');
         // 初始化
         document.addEventListener('DOMContentLoaded', async () => {
@@ -670,7 +669,7 @@
             fetchHitokoto();
             await loadDirectoryTree();
             setupEventListeners();
-            handleInitialUrl(); // 处理初始URL，包括 ?file= 和 /path
+            handleInitialUrl();
             setTimeout(() => {
                 loadingScreen.style.opacity = '0';
                 loadingScreen.style.visibility = 'hidden';
@@ -832,8 +831,7 @@
                         const label = item.name.replace('.md', '');
                         html += `
                             <div class="nav-item ${isActive ? 'active' : ''}" 
-                                 data-path="${encodeURIComponent(item.path)}"
-                                 data-original-path="${item.path}"
+                                 data-path="${item.path}"
                                  style="padding-left: ${(level + 1) * 12 + 20}px;">
                                 <div class="icon"><i class="ti ti-file-text"></i></div>
                                 <div class="label">${label}</div>
@@ -862,13 +860,9 @@
             directoryTree.addEventListener('click', e => {
                 const item = e.target.closest('.nav-item');
                 if (item) {
-                    const encodedPath = item.dataset.path;
-                    const originalPath = item.dataset.originalPath;
-                    // 使用原始路径或解码后的路径
-                    const filePath = originalPath || decodeURIComponent(encodedPath);
+                    const filePath = item.dataset.path;
                     loadFile(filePath);
                     updateActiveItem(filePath);
-                    updateUrl(filePath);
                     return;
                 }
                 const folderTitle = e.target.closest('.folder-title');
@@ -902,13 +896,10 @@
                     e.preventDefault();
                     loadFile('index.md');
                     updateActiveItem('index.md');
-                    updateUrl('index.md');
                 }
             });
             window.addEventListener('resize', handleResize);
             handleResize();
-            // 处理浏览器前进/后退
-            window.addEventListener('popstate', handleInitialUrl);
         }
         // 切换侧边栏
         function toggleSidebar(collapsed, saveToStorage = true) {
@@ -955,33 +946,32 @@
                 }
                 
                 // 对特殊字符进行编码，但保留斜杠
-                const encodedPath = fullPath.split('/').map(part => {
-                    // 对每个部分进行编码，除了空字符串（用于斜杠）
-                    return part ? encodeURIComponent(part) : '';
-                }).join('/');
+                const pathParts = fullPath.split('/');
+                const encodedPathParts = pathParts.map(part => {
+                    // 对每个部分进行编码
+                    return encodeURIComponent(part);
+                });
+                const encodedPath = encodedPathParts.join('/');
                 
                 const response = await fetch(encodedPath);
                 if (!response.ok) {
-                    // 如果第一种方式失败，尝试使用原始路径
-                    const response2 = await fetch(fullPath);
-                    if (!response2.ok) throw new Error('文件未找到');
-                    const markdown = await response2.text();
-                    setTimeout(() => {
-                        mainContent.innerHTML = marked.parse(markdown);
-                        mainContent.style.opacity = '1';
-                        mainContent.style.animation = 'fadeIn 0.3s ease-out';
-                    }, 150);
-                } else {
-                    const markdown = await response.text();
-                    setTimeout(() => {
-                        mainContent.innerHTML = marked.parse(markdown);
-                        mainContent.style.opacity = '1';
-                        mainContent.style.animation = 'fadeIn 0.3s ease-out';
-                    }, 150);
+                    throw new Error('文件未找到');
                 }
+                
+                const markdown = await response.text();
+                setTimeout(() => {
+                    mainContent.innerHTML = marked.parse(markdown);
+                    mainContent.style.opacity = '1';
+                    mainContent.style.animation = 'fadeIn 0.3s ease-out';
+                }, 150);
                 
                 state.currentFile = filePath;
                 updateActiveItem(filePath);
+                
+                // 更新页面标题
+                const fileName = filePath.replace('.md', '');
+                document.title = fileName === 'index' ? '文档' : `${fileName} - 文档`;
+                
             } catch (error) {
                 console.error('加载文件失败:', error);
                 showNotFoundPage();
@@ -997,53 +987,23 @@
         // 更新选中项
         function updateActiveItem(filePath) {
             document.querySelectorAll('.nav-item').forEach(item => {
-                const itemPath = item.dataset.originalPath || decodeURIComponent(item.dataset.path || '');
+                const itemPath = item.dataset.path;
                 const isActive = filePath === itemPath;
                 item.classList.toggle('active', isActive);
             });
         }
-        // 处理初始 URL 和前进后退
+        // 处理初始 URL
         function handleInitialUrl() {
             const params = new URLSearchParams(window.location.search);
             const fileParam = params.get('file');
-            const path = window.location.pathname;
-
+            
             if (fileParam) {
-                // 如果存在 ?file= 参数，重定向到 /路径 模式
-                const newPath = fileParam.endsWith('.md') ? fileParam.replace(/\.md$/, '') : fileParam;
-                const url = '/' + encodeURIComponent(newPath);
-                window.history.replaceState({}, '', url);
+                // 如果有 file 参数，加载对应文件
                 loadFile(fileParam.endsWith('.md') ? fileParam : fileParam + '.md');
-                updateActiveItem(fileParam + '.md');
-                return;
-            }
-
-            // 处理根路径
-            if (path === '/' || path === '/index.html') {
+            } else {
+                // 否则加载首页
                 loadFile('index.md');
-                updateActiveItem('index.md');
-                return;
             }
-
-            // 处理 /路径 模式
-            const encodedPath = path.endsWith('/') ? path.slice(1, -1) : path.slice(1);
-            if (encodedPath) {
-                try {
-                    const filePath = decodeURIComponent(encodedPath) + '.md';
-                    loadFile(filePath);
-                    updateActiveItem(filePath);
-                } catch (error) {
-                    console.error('URL解码失败:', error);
-                    // 如果解码失败，尝试直接使用
-                    loadFile(encodedPath + '.md');
-                }
-            }
-        }
-        // 更新 URL 为路径形式
-        function updateUrl(filePath) {
-            const path = filePath.replace(/\.md$/, '');
-            const url = path === 'index' ? '/' : '/' + encodeURIComponent(path);
-            window.history.pushState({ path: url }, '', url);
         }
         // 应用主题
         function applyTheme(theme) {
