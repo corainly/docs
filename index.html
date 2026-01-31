@@ -698,7 +698,7 @@
                 directoryTree.innerHTML = `<div style="padding: 15px; color: red;">加载目录树失败: ${error.message}</div>`;
             }
         }
-        // 解析目录树 - 改进的解析方法
+        // 解析目录树 - 改进的解析方法，修复文件名截断问题
         function parseDirectoryTree(text) {
             const lines = text.split('\n');
             const structure = {};
@@ -713,46 +713,19 @@
                         structure[currentGroup] = [];
                     }
                 } else if (line.startsWith('- [')) {
-                    // 使用栈来正确匹配括号
-                    let bracketStack = 0;
-                    let parenStack = 0;
-                    let linkTextStart = -1;
-                    let linkTextEnd = -1;
-                    let linkUrlStart = -1;
-                    let linkUrlEnd = -1;
+                    // 使用更简单直接的方法解析Markdown链接
+                    // 找到链接文本的开始和结束
+                    const linkStart = line.indexOf('[');
+                    const linkEnd = line.indexOf(']', linkStart);
                     
-                    for (let j = 0; j < line.length; j++) {
-                        const char = line[j];
-                        
-                        if (char === '[') {
-                            if (bracketStack === 0) {
-                                linkTextStart = j;
-                            }
-                            bracketStack++;
-                        } else if (char === ']') {
-                            bracketStack--;
-                            if (bracketStack === 0 && linkTextStart !== -1 && linkTextEnd === -1) {
-                                linkTextEnd = j;
-                            }
-                        } else if (char === '(') {
-                            if (parenStack === 0 && linkTextEnd !== -1) {
-                                linkUrlStart = j;
-                            }
-                            parenStack++;
-                        } else if (char === ')') {
-                            parenStack--;
-                            if (parenStack === 0 && linkUrlStart !== -1 && linkUrlEnd === -1) {
-                                linkUrlEnd = j;
-                                break; // 找到完整的链接后退出循环
-                            }
-                        }
-                    }
+                    // 找到URL的开始和结束
+                    const urlStart = line.indexOf('(', linkEnd);
+                    const urlEnd = line.lastIndexOf(')');
                     
-                    if (linkTextStart !== -1 && linkTextEnd !== -1 && 
-                        linkUrlStart !== -1 && linkUrlEnd !== -1) {
-                        
-                        const fileName = line.substring(linkTextStart + 1, linkTextEnd).trim();
-                        let filePath = line.substring(linkUrlStart + 1, linkUrlEnd).trim();
+                    if (linkStart !== -1 && linkEnd !== -1 && urlStart !== -1 && urlEnd !== -1) {
+                        // 提取文件名和路径
+                        const fileName = line.substring(linkStart + 1, linkEnd).trim();
+                        let filePath = line.substring(urlStart + 1, urlEnd).trim();
                         
                         // 移除路径中的 ./content/ 或 content/ 前缀
                         if (filePath.startsWith('./content/')) {
@@ -765,6 +738,9 @@
                         if (!structure[currentGroup]) {
                             structure[currentGroup] = [];
                         }
+                        
+                        // 调试输出
+                        console.log('解析文件:', fileName, '路径:', filePath);
                         
                         structure[currentGroup].push({
                             name: fileName,
@@ -860,6 +836,7 @@
                         item.name.toLowerCase().includes(state.searchQuery.toLowerCase());
                     if (shouldShowFile) {
                         const isActive = state.currentFile === item.path;
+                        // 显示完整的文件名（去掉.md扩展名）
                         const label = item.name.replace('.md', '');
                         html += `
                             <div class="nav-item ${isActive ? 'active' : ''}" 
