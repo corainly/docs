@@ -698,35 +698,61 @@
                 directoryTree.innerHTML = `<div style="padding: 15px; color: red;">加载目录树失败: ${error.message}</div>`;
             }
         }
-        // 解析目录树 - 完全重写，修复特殊字符处理
+        // 解析目录树 - 改进的解析方法
         function parseDirectoryTree(text) {
             const lines = text.split('\n');
             const structure = {};
+            let currentGroup = '';
             
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i].trim();
                 
                 if (line.startsWith('# ')) {
-                    const groupName = line.substring(2).trim();
-                    if (!structure[groupName]) {
-                        structure[groupName] = [];
+                    currentGroup = line.substring(2).trim();
+                    if (!structure[currentGroup]) {
+                        structure[currentGroup] = [];
                     }
                 } else if (line.startsWith('- [')) {
-                    // 手动解析Markdown链接，而不是使用正则表达式
-                    // 查找第一个 '[' 和最后一个 ']' 之间的内容
-                    const bracketStart = line.indexOf('[');
-                    const bracketEnd = line.lastIndexOf(']');
+                    // 使用栈来正确匹配括号
+                    let bracketStack = 0;
+                    let parenStack = 0;
+                    let linkTextStart = -1;
+                    let linkTextEnd = -1;
+                    let linkUrlStart = -1;
+                    let linkUrlEnd = -1;
                     
-                    // 查找 '(' 和 ')' 之间的内容
-                    const parenStart = line.indexOf('(', bracketEnd);
-                    const parenEnd = line.lastIndexOf(')');
-                    
-                    if (bracketStart !== -1 && bracketEnd !== -1 && 
-                        parenStart !== -1 && parenEnd !== -1 && 
-                        bracketEnd < parenStart) {
+                    for (let j = 0; j < line.length; j++) {
+                        const char = line[j];
                         
-                        const fileName = line.substring(bracketStart + 1, bracketEnd).trim();
-                        let filePath = line.substring(parenStart + 1, parenEnd).trim();
+                        if (char === '[') {
+                            if (bracketStack === 0) {
+                                linkTextStart = j;
+                            }
+                            bracketStack++;
+                        } else if (char === ']') {
+                            bracketStack--;
+                            if (bracketStack === 0 && linkTextStart !== -1 && linkTextEnd === -1) {
+                                linkTextEnd = j;
+                            }
+                        } else if (char === '(') {
+                            if (parenStack === 0 && linkTextEnd !== -1) {
+                                linkUrlStart = j;
+                            }
+                            parenStack++;
+                        } else if (char === ')') {
+                            parenStack--;
+                            if (parenStack === 0 && linkUrlStart !== -1 && linkUrlEnd === -1) {
+                                linkUrlEnd = j;
+                                break; // 找到完整的链接后退出循环
+                            }
+                        }
+                    }
+                    
+                    if (linkTextStart !== -1 && linkTextEnd !== -1 && 
+                        linkUrlStart !== -1 && linkUrlEnd !== -1) {
+                        
+                        const fileName = line.substring(linkTextStart + 1, linkTextEnd).trim();
+                        let filePath = line.substring(linkUrlStart + 1, linkUrlEnd).trim();
                         
                         // 移除路径中的 ./content/ 或 content/ 前缀
                         if (filePath.startsWith('./content/')) {
@@ -735,15 +761,7 @@
                             filePath = filePath.substring(8);
                         }
                         
-                        // 查找当前文件所属的分组
-                        let currentGroup = '';
-                        for (let j = i - 1; j >= 0; j--) {
-                            if (lines[j].startsWith('# ')) {
-                                currentGroup = lines[j].substring(2).trim();
-                                break;
-                            }
-                        }
-                        
+                        // 确保有当前分组
                         if (!structure[currentGroup]) {
                             structure[currentGroup] = [];
                         }
