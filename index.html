@@ -698,23 +698,35 @@
                 directoryTree.innerHTML = `<div style="padding: 15px; color: red;">加载目录树失败: ${error.message}</div>`;
             }
         }
-        // 解析目录树 - 修复了特殊字符处理
+        // 解析目录树 - 完全重写，修复特殊字符处理
         function parseDirectoryTree(text) {
             const lines = text.split('\n');
             const structure = {};
             
-            for (const line of lines) {
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                
                 if (line.startsWith('# ')) {
                     const groupName = line.substring(2).trim();
                     if (!structure[groupName]) {
                         structure[groupName] = [];
                     }
                 } else if (line.startsWith('- [')) {
-                    // 改进的正则表达式，更好地处理特殊字符
-                    const match = line.match(/^- \[(.*?)\]\((.*?)\)/);
-                    if (match && match.length >= 3) {
-                        const fileName = match[1];
-                        let filePath = match[2];
+                    // 手动解析Markdown链接，而不是使用正则表达式
+                    // 查找第一个 '[' 和最后一个 ']' 之间的内容
+                    const bracketStart = line.indexOf('[');
+                    const bracketEnd = line.lastIndexOf(']');
+                    
+                    // 查找 '(' 和 ')' 之间的内容
+                    const parenStart = line.indexOf('(', bracketEnd);
+                    const parenEnd = line.lastIndexOf(')');
+                    
+                    if (bracketStart !== -1 && bracketEnd !== -1 && 
+                        parenStart !== -1 && parenEnd !== -1 && 
+                        bracketEnd < parenStart) {
+                        
+                        const fileName = line.substring(bracketStart + 1, bracketEnd).trim();
+                        let filePath = line.substring(parenStart + 1, parenEnd).trim();
                         
                         // 移除路径中的 ./content/ 或 content/ 前缀
                         if (filePath.startsWith('./content/')) {
@@ -725,9 +737,9 @@
                         
                         // 查找当前文件所属的分组
                         let currentGroup = '';
-                        for (let i = lines.indexOf(line) - 1; i >= 0; i--) {
-                            if (lines[i].startsWith('# ')) {
-                                currentGroup = lines[i].substring(2).trim();
+                        for (let j = i - 1; j >= 0; j--) {
+                            if (lines[j].startsWith('# ')) {
+                                currentGroup = lines[j].substring(2).trim();
                                 break;
                             }
                         }
@@ -740,6 +752,8 @@
                             name: fileName,
                             path: filePath
                         });
+                    } else {
+                        console.warn('无法解析的行:', line);
                     }
                 }
             }
@@ -955,15 +969,23 @@
                 
                 const response = await fetch(encodedPath);
                 if (!response.ok) {
-                    throw new Error('文件未找到');
+                    // 如果第一种方式失败，尝试使用原始路径
+                    const response2 = await fetch(fullPath);
+                    if (!response2.ok) throw new Error('文件未找到');
+                    const markdown = await response2.text();
+                    setTimeout(() => {
+                        mainContent.innerHTML = marked.parse(markdown);
+                        mainContent.style.opacity = '1';
+                        mainContent.style.animation = 'fadeIn 0.3s ease-out';
+                    }, 150);
+                } else {
+                    const markdown = await response.text();
+                    setTimeout(() => {
+                        mainContent.innerHTML = marked.parse(markdown);
+                        mainContent.style.opacity = '1';
+                        mainContent.style.animation = 'fadeIn 0.3s ease-out';
+                    }, 150);
                 }
-                
-                const markdown = await response.text();
-                setTimeout(() => {
-                    mainContent.innerHTML = marked.parse(markdown);
-                    mainContent.style.opacity = '1';
-                    mainContent.style.animation = 'fadeIn 0.3s ease-out';
-                }, 150);
                 
                 state.currentFile = filePath;
                 updateActiveItem(filePath);
