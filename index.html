@@ -698,7 +698,7 @@
                 directoryTree.innerHTML = `<div style="padding: 15px; color: red;">加载目录树失败: ${error.message}</div>`;
             }
         }
-        // 解析目录树 - 改进的解析方法，修复文件名截断问题
+        // 解析目录树 - 改进的解析方法，处理带反引号的文件名
         function parseDirectoryTree(text) {
             const lines = text.split('\n');
             const structure = {};
@@ -712,18 +712,52 @@
                     if (!structure[currentGroup]) {
                         structure[currentGroup] = [];
                     }
-                } else if (line.startsWith('- [')) {
-                    // 使用更简单直接的方法解析Markdown链接
-                    // 找到链接文本的开始和结束
+                } else if (line.startsWith('- ')) {
+                    // 使用更健壮的方法解析Markdown链接
+                    // 检查是否包含反引号包裹的文件名
+                    if (line.includes('`')) {
+                        // 处理带反引号的文件名，例如：`(example)[example]example.md`
+                        const backtickStart = line.indexOf('`');
+                        const backtickEnd = line.indexOf('`', backtickStart + 1);
+                        const urlStart = line.indexOf('(', backtickEnd);
+                        const urlEnd = line.lastIndexOf(')');
+                        
+                        if (backtickStart !== -1 && backtickEnd !== -1 && 
+                            urlStart !== -1 && urlEnd !== -1) {
+                            
+                            // 提取文件名（去掉反引号）
+                            const fileName = line.substring(backtickStart + 1, backtickEnd).trim();
+                            let filePath = line.substring(urlStart + 1, urlEnd).trim();
+                            
+                            // 移除路径中的 ./content/ 或 content/ 前缀
+                            if (filePath.startsWith('./content/')) {
+                                filePath = filePath.substring(10);
+                            } else if (filePath.startsWith('content/')) {
+                                filePath = filePath.substring(8);
+                            }
+                            
+                            // 确保有当前分组
+                            if (!structure[currentGroup]) {
+                                structure[currentGroup] = [];
+                            }
+                            
+                            structure[currentGroup].push({
+                                name: fileName,
+                                path: filePath
+                            });
+                            continue;
+                        }
+                    }
+                    
+                    // 如果没有反引号，使用常规解析方法
                     const linkStart = line.indexOf('[');
                     const linkEnd = line.indexOf(']', linkStart);
-                    
-                    // 找到URL的开始和结束
                     const urlStart = line.indexOf('(', linkEnd);
                     const urlEnd = line.lastIndexOf(')');
                     
-                    if (linkStart !== -1 && linkEnd !== -1 && urlStart !== -1 && urlEnd !== -1) {
-                        // 提取文件名和路径
+                    if (linkStart !== -1 && linkEnd !== -1 && 
+                        urlStart !== -1 && urlEnd !== -1) {
+                        
                         const fileName = line.substring(linkStart + 1, linkEnd).trim();
                         let filePath = line.substring(urlStart + 1, urlEnd).trim();
                         
@@ -738,9 +772,6 @@
                         if (!structure[currentGroup]) {
                             structure[currentGroup] = [];
                         }
-                        
-                        // 调试输出
-                        console.log('解析文件:', fileName, '路径:', filePath);
                         
                         structure[currentGroup].push({
                             name: fileName,
